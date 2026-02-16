@@ -1,0 +1,83 @@
+{{define "content"}}
+<div class="page-header">
+  <h1>Audit Log</h1>
+  <span style="font-size:0.85rem;color:var(--text-muted)">{{.AuditResult.Total}} total</span>
+</div>
+
+<div class="filter-bar">
+  <select id="filter-action" onchange="applyAuditFilter()">
+    <option value="">All Actions</option>
+    {{range .AuditFilterActions}}<option value="{{.}}" {{if eq . $.FilterAction}}selected{{end}}>{{.}}</option>{{end}}
+  </select>
+  <button class="btn btn-sm btn-outline" onclick="clearAuditFilter()">Clear</button>
+</div>
+
+<div class="section">
+  <table>
+    <thead>
+      <tr>
+        <th>Time</th>
+        <th>User</th>
+        <th>Action</th>
+        <th>Target</th>
+        <th>Details</th>
+        <th>IP</th>
+      </tr>
+    </thead>
+    <tbody>
+    {{range .AuditResult.Entries}}
+    <tr>
+      <td>{{formatTimeDetail .Timestamp}}</td>
+      <td>{{.Username}}</td>
+      <td><span class="badge badge-priority">{{.Action}}</span></td>
+      <td>{{if .TargetType}}{{.TargetType}}{{if .TargetID}}/{{.TargetID}}{{end}}{{else}}-{{end}}</td>
+      <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{.Details}}">{{if .Details}}{{.Details}}{{else}}-{{end}}</td>
+      <td>{{if .IPAddress}}{{.IPAddress}}{{else}}-{{end}}</td>
+    </tr>
+    {{end}}
+    {{if not .AuditResult.Entries}}
+    <tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px;">No audit log entries</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+
+  {{if gt .AuditResult.TotalPages 1}}
+  <div class="pagination">
+    <button {{if le .AuditResult.Page 1}}disabled{{end}} onclick="goToAuditPage(1)">First</button>
+    <button {{if le .AuditResult.Page 1}}disabled{{end}} onclick="goToAuditPage({{subInt .AuditResult.Page 1}})">Prev</button>
+    {{$page := .AuditResult.Page}}
+    {{$total := .AuditResult.TotalPages}}
+    {{range seq (paginationStart $page $total) (paginationEnd $page $total)}}
+    <button class="{{if eq . $page}}active{{end}}" onclick="goToAuditPage({{.}})">{{.}}</button>
+    {{end}}
+    <button {{if ge .AuditResult.Page .AuditResult.TotalPages}}disabled{{end}} onclick="goToAuditPage({{addInt .AuditResult.Page 1}})">Next</button>
+    <button {{if ge .AuditResult.Page .AuditResult.TotalPages}}disabled{{end}} onclick="goToAuditPage({{.AuditResult.TotalPages}})">Last</button>
+    <span class="page-info">Page {{.AuditResult.Page}} of {{.AuditResult.TotalPages}}</span>
+  </div>
+  {{end}}
+</div>
+
+<script>
+function buildAuditURL(page) {
+  var params = [];
+  var action = document.getElementById('filter-action').value;
+  if (action) params.push('action=' + encodeURIComponent(action));
+  if (page > 1) params.push('page=' + page);
+  return '/audit' + (params.length ? '?' + params.join('&') : '');
+}
+function applyAuditFilter() {
+  var url = buildAuditURL(1);
+  htmx.ajax('GET', url, {target: '#content', swap: 'innerHTML'});
+  history.pushState({}, '', url);
+}
+function goToAuditPage(page) {
+  var url = buildAuditURL(page);
+  htmx.ajax('GET', url, {target: '#content', swap: 'innerHTML'});
+  history.pushState({}, '', url);
+}
+function clearAuditFilter() {
+  document.getElementById('filter-action').value = '';
+  applyAuditFilter();
+}
+</script>
+{{end}}

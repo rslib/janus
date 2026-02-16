@@ -1,0 +1,230 @@
+{{define "content"}}
+<div class="page-header">
+  <h1>Dashboard</h1>
+</div>
+
+<div class="cards">
+  {{with .Summary.Today}}
+  <div class="card"><div class="label">Requests Today</div><div class="value">{{.Requests}}</div></div>
+  <div class="card"><div class="label">Cost Today</div><div class="value green">{{formatCost .CostUSD}}</div></div>
+  <div class="card"><div class="label">Tokens Today</div><div class="value blue">{{addInt .InputTokens .OutputTokens}}</div><div class="sub">{{.InputTokens}} in / {{.OutputTokens}} out</div></div>
+  <div class="card"><div class="label">Errors Today</div><div class="value {{if gt .Errors 0}}red{{end}}">{{.Errors}}</div></div>
+  <div class="card"><div class="label">Cache Hits</div><div class="value">{{.CachedHits}}</div></div>
+  {{end}}
+  {{with .Summary.Week}}
+  <div class="card"><div class="label">Cost (7d)</div><div class="value green">{{formatCost .CostUSD}}</div></div>
+  {{end}}
+</div>
+
+{{if .ProviderHealth}}
+<div class="section">
+  <h2>Provider Health</h2>
+  <div class="health-row">
+    {{range .ProviderHealth}}
+    <div class="health-item">
+      <span class="provider-name">{{.Provider}}</span>
+      <span class="badge badge-{{.Status}}">{{.Status}}</span>
+      {{if eq .CircuitState "open"}}<span class="badge badge-open">circuit open</span>{{end}}
+      {{if eq .CircuitState "half-open"}}<span class="badge badge-half-open">half-open</span>{{end}}
+      <span style="font-size:0.75rem;color:var(--text-muted)">{{printf "%.0f" .AvgLatency}}ms avg | {{formatPct .ErrorRate}} errors</span>
+    </div>
+    {{end}}
+  </div>
+</div>
+{{end}}
+
+{{if .Latency}}{{if gt .Latency.Max 0.0}}
+<div class="cards">
+  <div class="card"><div class="label">P50 Latency</div><div class="value">{{printf "%.0f" .Latency.P50}}ms</div></div>
+  <div class="card"><div class="label">P95 Latency</div><div class="value yellow">{{printf "%.0f" .Latency.P95}}ms</div></div>
+  <div class="card"><div class="label">P99 Latency</div><div class="value red">{{printf "%.0f" .Latency.P99}}ms</div></div>
+  <div class="card"><div class="label">Avg Latency</div><div class="value">{{printf "%.0f" .Latency.Avg}}ms</div></div>
+</div>
+{{end}}{{end}}
+
+{{if .CacheEnabled}}{{if .CacheInfo}}{{if .CacheInfo.Connected}}
+<div class="cards">
+  <div class="card"><div class="label">Cache Hit Rate</div><div class="value green">{{formatPct .CacheInfo.HitRate}}</div><div class="sub">{{.CacheInfo.Hits}} hits / {{.CacheInfo.Misses}} misses</div></div>
+  <div class="card"><div class="label">Cache Memory</div><div class="value">{{.CacheInfo.MemoryUsed}}</div></div>
+  <div class="card"><div class="label">Cached Keys</div><div class="value">{{.CacheInfo.Keys}}</div></div>
+</div>
+{{end}}{{end}}{{end}}
+
+<div class="tabs">
+  <button class="active" onclick="loadTimeseries('24h', this)">24h</button>
+  <button onclick="loadTimeseries('7d', this)">7d</button>
+  <button onclick="loadTimeseries('30d', this)">30d</button>
+</div>
+<div class="section">
+  <h2>Requests & Cost</h2>
+  <canvas id="chart" height="200"></canvas>
+</div>
+
+<div class="section">
+  <h2>Cost Breakdown</h2>
+  <div class="tabs" id="cost-tabs">
+    <button class="active" onclick="loadCostBreakdown('model', this)">By Model</button>
+    <button onclick="loadCostBreakdown('token', this)">By Token</button>
+    <button onclick="loadCostBreakdown('provider', this)">By Provider</button>
+  </div>
+  <canvas id="cost-chart" height="200"></canvas>
+</div>
+
+{{if .Models}}
+<div class="section">
+  <h2>Models<span class="export-links"><a href="/api/export/stats?format=csv&type=models" target="_blank">CSV</a><a href="/api/export/stats?format=json&type=models" target="_blank">JSON</a></span></h2>
+  <table>
+    <thead><tr><th>Model</th><th>Requests</th><th>Tokens (in/out)</th><th>Cost</th><th>Avg Latency</th></tr></thead>
+    <tbody>
+    {{range .Models}}
+    <tr>
+      <td>{{.Model}}</td>
+      <td>{{.Requests}}</td>
+      <td>{{.InputTokens}} / {{.OutputTokens}}</td>
+      <td class="green">{{formatCost .CostUSD}}</td>
+      <td>{{printf "%.0f" .AvgLatencyMS}}ms</td>
+    </tr>
+    {{end}}
+    </tbody>
+  </table>
+</div>
+{{end}}
+
+{{if .Providers}}
+<div class="section">
+  <h2>Providers<span class="export-links"><a href="/api/export/stats?format=csv&type=providers" target="_blank">CSV</a><a href="/api/export/stats?format=json&type=providers" target="_blank">JSON</a></span></h2>
+  <table>
+    <thead><tr><th>Provider</th><th>Requests</th><th>Success</th><th>Errors</th><th>Avg Latency</th><th>Cost</th></tr></thead>
+    <tbody>
+    {{range .Providers}}
+    <tr>
+      <td>{{.Provider}}</td>
+      <td>{{.Requests}}</td>
+      <td class="green">{{.Successes}}</td>
+      <td class="red">{{.Errors}}</td>
+      <td>{{printf "%.0f" .AvgLatencyMS}}ms</td>
+      <td class="green">{{formatCost .CostUSD}}</td>
+    </tr>
+    {{end}}
+    </tbody>
+  </table>
+</div>
+{{end}}
+
+{{if .TokenStats}}
+<div class="section">
+  <h2>API Token Usage<span class="export-links"><a href="/api/export/stats?format=csv&type=tokens" target="_blank">CSV</a><a href="/api/export/stats?format=json&type=tokens" target="_blank">JSON</a></span></h2>
+  <table>
+    <thead><tr><th>Token</th><th>Requests</th><th>Tokens (in/out)</th><th>Cost</th></tr></thead>
+    <tbody>
+    {{range .TokenStats}}
+    <tr>
+      <td>{{.TokenName}}</td>
+      <td>{{.Requests}}</td>
+      <td>{{.InputTokens}} / {{.OutputTokens}}</td>
+      <td class="green">{{formatCost .CostUSD}}</td>
+    </tr>
+    {{end}}
+    </tbody>
+  </table>
+</div>
+{{end}}
+
+<script>
+var _chart, _costChart;
+function chartColors() {
+  var isLight = document.documentElement.hasAttribute('data-theme');
+  return {
+    text: isLight ? '#475569' : '#94a3b8',
+    grid: isLight ? '#e2e8f020' : '#334155',
+    green: '#4ade80',
+    legend: isLight ? '#1e293b' : '#e2e8f0'
+  };
+}
+function formatCostTick(v) {
+  if (v === 0) return '$0';
+  if (v < 0.001) return '$' + v.toFixed(6);
+  if (v < 0.01) return '$' + v.toFixed(4);
+  return '$' + v.toFixed(2);
+}
+function loadTimeseries(period, btn) {
+  document.querySelectorAll('.tabs button').forEach(function(b) { b.classList.remove('active'); });
+  if (btn) btn.classList.add('active');
+  else document.querySelector('.tabs button').classList.add('active');
+  fetch('/api/stats/timeseries?period=' + period, {credentials: 'same-origin'})
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var c = chartColors();
+      var labels = (data||[]).map(function(d) { return d.bucket; });
+      var requests = (data||[]).map(function(d) { return d.requests; });
+      var costs = (data||[]).map(function(d) { return d.cost_usd; });
+      if (_chart) _chart.destroy();
+      _chart = new Chart(document.getElementById('chart'), {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [
+            { label: 'Requests', data: requests, backgroundColor: 'rgba(59,130,246,0.5)', yAxisID: 'y' },
+            { label: 'Cost ($)', data: costs, type: 'line', borderColor: c.green, backgroundColor: 'rgba(74,222,128,0.1)', yAxisID: 'y1', tension: 0.3, pointRadius: 3 }
+          ]
+        },
+        options: {
+          responsive: true,
+          interaction: { mode: 'index', intersect: false },
+          scales: {
+            y: { position: 'left', beginAtZero: true, ticks: { color: c.text, precision: 0 }, grid: { color: c.grid } },
+            y1: { position: 'right', beginAtZero: true, ticks: { color: c.green, callback: formatCostTick }, grid: { display: false } },
+            x: { ticks: { color: c.text, maxRotation: 45 }, grid: { color: c.grid } }
+          },
+          plugins: { legend: { labels: { color: c.legend } } }
+        }
+      });
+    }).catch(function(){});
+}
+loadTimeseries('24h');
+
+function loadCostBreakdown(groupBy, btn) {
+  document.querySelectorAll('#cost-tabs button').forEach(function(b) { b.classList.remove('active'); });
+  if (btn) btn.classList.add('active');
+  fetch('/api/stats/cost-breakdown?period=7d&group_by=' + groupBy, {credentials: 'same-origin'})
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (!data || data.length === 0) {
+        if (_costChart) _costChart.destroy();
+        return;
+      }
+      var c = chartColors();
+      var days = [], groups = {};
+      (data||[]).forEach(function(d) {
+        if (days.indexOf(d.day) === -1) days.push(d.day);
+        if (!groups[d.group_by]) groups[d.group_by] = {};
+        groups[d.group_by][d.day] = d.cost_usd;
+      });
+      var palette = ['#3b82f6','#4ade80','#f87171','#fbbf24','#a78bfa','#f472b6','#22d3ee','#fb923c'];
+      var datasets = [], ci = 0;
+      for (var g in groups) {
+        datasets.push({
+          label: g,
+          data: days.map(function(day) { return groups[g][day] || 0; }),
+          backgroundColor: palette[ci % palette.length] + '80'
+        });
+        ci++;
+      }
+      if (_costChart) _costChart.destroy();
+      _costChart = new Chart(document.getElementById('cost-chart'), {
+        type: 'bar',
+        data: { labels: days, datasets: datasets },
+        options: {
+          responsive: true,
+          scales: {
+            x: { stacked: true, ticks: { color: c.text }, grid: { color: c.grid } },
+            y: { stacked: true, beginAtZero: true, ticks: { color: c.text, callback: formatCostTick }, grid: { color: c.grid } }
+          },
+          plugins: { legend: { labels: { color: c.legend } } }
+        }
+      });
+    }).catch(function(){});
+}
+loadCostBreakdown('model');
+</script>
+{{end}}

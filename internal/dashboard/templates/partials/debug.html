@@ -1,0 +1,94 @@
+{{define "content"}}
+<div class="page-header">
+  <h1>Debug Logging</h1>
+  <span style="font-size:0.85rem;color:var(--text-muted)">{{.DebugResult.Total}} entries</span>
+</div>
+
+<div class="section" style="display:flex;align-items:center;gap:16px;padding:12px 16px;">
+  <span style="font-size:0.9rem;font-weight:600;">Debug Mode</span>
+  <label class="toggle-switch">
+    <input type="checkbox" id="debug-toggle" {{if .DebugEnabled}}checked{{end}}
+      hx-post="/api/debug/toggle" hx-swap="none" hx-ext="json-enc"
+      hx-vals='js:{enabled: document.getElementById("debug-toggle").checked}'
+      hx-trigger="change"
+      hx-on::after-request="htmx.ajax('GET', '/debug', {target: '#content', swap: 'innerHTML'})">
+    <span class="toggle-slider"></span>
+  </label>
+  <span id="debug-status" style="font-size:0.8rem;color:var(--text-muted)">{{if .DebugEnabled}}Enabled — requests are being logged{{else}}Disabled{{end}}</span>
+</div>
+
+<div class="section">
+  <table>
+    <thead>
+      <tr>
+        <th></th>
+        <th>Time</th>
+        <th>Request ID</th>
+        <th>Token</th>
+        <th>Model</th>
+        <th>Provider</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+    {{range $i, $entry := .DebugResult.Entries}}
+    <tr class="expandable" onclick="toggleDebugExpand('debug-expand-{{$i}}')">
+      <td style="width:20px;text-align:center;color:var(--text-muted)">&#9654;</td>
+      <td>{{formatTimeDetail $entry.Timestamp}}</td>
+      <td><code style="font-size:0.75rem">{{$entry.RequestID}}</code></td>
+      <td>{{$entry.TokenName}}</td>
+      <td>{{$entry.Model}}</td>
+      <td>{{$entry.Provider}}</td>
+      <td>
+        {{if and (ge $entry.ResponseStatus 200) (lt $entry.ResponseStatus 300)}}<span class="badge badge-success">{{$entry.ResponseStatus}}</span>
+        {{else if ge $entry.ResponseStatus 400}}<span class="badge badge-error">{{$entry.ResponseStatus}}</span>
+        {{else}}<span class="badge">{{$entry.ResponseStatus}}</span>{{end}}
+      </td>
+    </tr>
+    <tr>
+      <td colspan="7" style="padding:0;">
+        <div id="debug-expand-{{$i}}" class="expand-content">
+          <div style="margin-bottom:8px"><strong>Request Headers:</strong></div>
+          <div class="code-block">{{if $entry.RequestHeaders}}{{$entry.RequestHeaders}}{{else}}(none){{end}}</div>
+          <div style="margin:8px 0"><strong>Request Body:</strong></div>
+          <div class="code-block">{{if $entry.RequestBody}}{{$entry.RequestBody}}{{else}}(none){{end}}</div>
+          <div style="margin:8px 0"><strong>Response Body:</strong></div>
+          <div class="code-block">{{if $entry.ResponseBody}}{{$entry.ResponseBody}}{{else}}(none){{end}}</div>
+        </div>
+      </td>
+    </tr>
+    {{end}}
+    {{if not .DebugResult.Entries}}
+    <tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px;">No debug log entries</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+
+  {{if gt .DebugResult.TotalPages 1}}
+  <div class="pagination">
+    <button {{if le .DebugResult.Page 1}}disabled{{end}} onclick="goToDebugPage(1)">First</button>
+    <button {{if le .DebugResult.Page 1}}disabled{{end}} onclick="goToDebugPage({{subInt .DebugResult.Page 1}})">Prev</button>
+    {{$page := .DebugResult.Page}}
+    {{$total := .DebugResult.TotalPages}}
+    {{range seq (paginationStart $page $total) (paginationEnd $page $total)}}
+    <button class="{{if eq . $page}}active{{end}}" onclick="goToDebugPage({{.}})">{{.}}</button>
+    {{end}}
+    <button {{if ge .DebugResult.Page .DebugResult.TotalPages}}disabled{{end}} onclick="goToDebugPage({{addInt .DebugResult.Page 1}})">Next</button>
+    <button {{if ge .DebugResult.Page .DebugResult.TotalPages}}disabled{{end}} onclick="goToDebugPage({{.DebugResult.TotalPages}})">Last</button>
+    <span class="page-info">Page {{.DebugResult.Page}} of {{.DebugResult.TotalPages}}</span>
+  </div>
+  {{end}}
+</div>
+
+<script>
+function toggleDebugExpand(id) {
+  var el = document.getElementById(id);
+  if (el) el.classList.toggle('show');
+}
+function goToDebugPage(page) {
+  var url = '/debug' + (page > 1 ? '?page=' + page : '');
+  htmx.ajax('GET', url, {target: '#content', swap: 'innerHTML'});
+  history.pushState({}, '', url);
+}
+</script>
+{{end}}

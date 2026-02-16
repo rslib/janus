@@ -1,0 +1,142 @@
+{{define "content"}}
+<div class="page-header">
+  <h1>API Tokens</h1>
+  <button class="btn btn-sm btn-primary" onclick="showCreateTokenModal()">Create Token</button>
+</div>
+
+<div id="new-token-display" style="display:none; margin-bottom:16px;"></div>
+
+<div class="section">
+  <h2>Static Tokens <span style="font-size:0.75rem;color:var(--text-muted);font-weight:400;">(from config, managed via environment variables)</span></h2>
+  <table>
+    <thead><tr><th>Name</th><th>Prefix</th><th>Rate Limit</th><th>Budget</th><th>Today's Spend</th><th></th></tr></thead>
+    <tbody>
+    {{range .Tokens}}{{if lt .ID 0}}
+    <tr>
+      <td>{{.Name}}</td>
+      <td><code>{{.KeyPrefix}}...</code></td>
+      <td>{{if eq .RateLimitRPM 0}}unlimited{{else}}{{.RateLimitRPM}} rpm{{end}}</td>
+      <td>
+        {{if gt .DailyBudgetUSD 0.0}}${{printf "%.2f" .DailyBudgetUSD}}/day{{else}}-{{end}}
+        {{if gt .MonthlyBudgetUSD 0.0}}<br>${{printf "%.2f" .MonthlyBudgetUSD}}/mo{{end}}
+      </td>
+      <td>
+        {{$spend := index $.TokenSpend .Name}}
+        {{if gt .DailyBudgetUSD 0.0}}
+          {{$pct := budgetPct $spend .DailyBudgetUSD}}
+          <div style="min-width:120px;">
+            <div class="progress-bar"><div class="progress-bar-fill" style="width:{{if gt $pct 100.0}}100{{else}}{{printf "%.0f" $pct}}{{end}}%;background:{{budgetColor $pct}};"></div></div>
+            <div class="budget-info">${{printf "%.4f" $spend}} / ${{printf "%.2f" .DailyBudgetUSD}} ({{printf "%.1f" $pct}}%)</div>
+          </div>
+        {{else}}
+          {{if gt $spend 0.0}}{{formatCost $spend}}{{else}}-{{end}}
+        {{end}}
+      </td>
+      <td><span class="badge badge-totp">config</span></td>
+    </tr>
+    {{end}}{{end}}
+    </tbody>
+  </table>
+</div>
+
+<div class="section">
+  <h2>Dynamic Tokens <span style="font-size:0.75rem;color:var(--text-muted);font-weight:400;">(created via dashboard)</span></h2>
+  <table>
+    <thead><tr><th>Name</th><th>Prefix</th><th>Rate Limit</th><th>Budget</th><th>Today's Spend</th><th>Created</th><th>Last Used</th><th></th></tr></thead>
+    <tbody id="tokens-tbody">
+    {{range .Tokens}}{{if gt .ID 0}}
+    <tr>
+      <td>{{.Name}}</td>
+      <td><code>{{.KeyPrefix}}...</code></td>
+      <td>{{if eq .RateLimitRPM 0}}unlimited{{else}}{{.RateLimitRPM}} rpm{{end}}</td>
+      <td>
+        {{if gt .DailyBudgetUSD 0.0}}${{printf "%.2f" .DailyBudgetUSD}}/day{{else}}-{{end}}
+        {{if gt .MonthlyBudgetUSD 0.0}}<br>${{printf "%.2f" .MonthlyBudgetUSD}}/mo{{end}}
+      </td>
+      <td>
+        {{$spend := index $.TokenSpend .Name}}
+        {{if gt .DailyBudgetUSD 0.0}}
+          {{$pct := budgetPct $spend .DailyBudgetUSD}}
+          <div style="min-width:120px;">
+            <div class="progress-bar"><div class="progress-bar-fill" style="width:{{if gt $pct 100.0}}100{{else}}{{printf "%.0f" $pct}}{{end}}%;background:{{budgetColor $pct}};"></div></div>
+            <div class="budget-info">${{printf "%.4f" $spend}} / ${{printf "%.2f" .DailyBudgetUSD}} ({{printf "%.1f" $pct}}%)</div>
+          </div>
+        {{else}}
+          {{if gt $spend 0.0}}{{formatCost $spend}}{{else}}-{{end}}
+        {{end}}
+      </td>
+      <td>{{formatTime .CreatedAt}}</td>
+      <td>{{if gt .LastUsedAt 0}}{{formatTime .LastUsedAt}}{{else}}never{{end}}</td>
+      <td><button class="btn btn-sm btn-danger"
+        hx-delete="/api/tokens/{{.ID}}" hx-swap="none"
+        hx-confirm="Revoke this API token? This cannot be undone.">Revoke</button></td>
+    </tr>
+    {{end}}{{end}}
+    </tbody>
+  </table>
+</div>
+
+<!-- Create Token Modal -->
+<div id="modal-create-token" class="modal-overlay">
+  <div class="modal">
+    <h2>Create API Token</h2>
+    <div id="create-token-error"></div>
+    <form hx-post="/api/tokens" hx-target="#new-token-display" hx-swap="innerHTML" hx-ext="json-enc"
+      hx-vals='js:{name: document.getElementById("token-name").value, rate_limit_rpm: parseInt(document.getElementById("token-rpm").value) || 0, daily_budget_usd: parseFloat(document.getElementById("token-budget").value) || 0}'>
+      <div class="form-group">
+        <label>Token Name</label>
+        <input type="text" id="token-name" required placeholder="e.g. my-app">
+      </div>
+      <div class="form-group">
+        <label>Rate Limit (requests/min, 0 = unlimited)</label>
+        <input type="number" id="token-rpm" value="0" min="0">
+      </div>
+      <div class="form-group">
+        <label>Daily Budget (USD, 0 = unlimited)</label>
+        <input type="number" id="token-budget" value="0" min="0" step="0.01">
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary" style="width:auto">Create</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function showCreateTokenModal() {
+  document.getElementById('new-token-display').style.display = 'none';
+  document.getElementById('create-token-error').innerHTML = '';
+  document.getElementById('token-name').value = '';
+  document.getElementById('token-rpm').value = '0';
+  document.getElementById('token-budget').value = '0';
+  document.getElementById('modal-create-token').classList.add('show');
+}
+function closeModal() {
+  document.getElementById('modal-create-token').classList.remove('show');
+}
+document.getElementById('modal-create-token').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+// After token creation: show key, close modal, refresh token table only
+document.body.addEventListener('tokenCreated', function() {
+  closeModal();
+  document.getElementById('new-token-display').style.display = 'block';
+  // Refresh only the token table body, preserving the new-token-display
+  setTimeout(function() {
+    htmx.ajax('GET', '/tokens', {target: '#tokens-tbody', select: '#tokens-tbody', swap: 'outerHTML'});
+  }, 100);
+});
+
+// Handle token create errors (non-200 responses swap into error div)
+document.body.addEventListener('htmx:beforeSwap', function(e) {
+  if (e.detail.target.id === 'new-token-display' && !e.detail.isError && !e.detail.xhr.getResponseHeader('HX-Trigger')) {
+    // Error response - redirect to error div
+    if (e.detail.xhr.status >= 400) {
+      e.detail.target = document.getElementById('create-token-error');
+    }
+  }
+});
+</script>
+{{end}}

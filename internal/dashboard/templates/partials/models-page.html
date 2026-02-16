@@ -1,0 +1,53 @@
+{{define "content"}}
+<div class="page-header">
+  <h1>Model Routing</h1>
+</div>
+
+{{if .ModelRoutes}}
+{{range .ModelRoutes}}
+<div class="section">
+  <h2>{{.Name}}{{if .Aliases}} <span style="font-size:0.75rem;color:var(--text-muted);font-weight:400;">aliases: {{range $i, $a := .Aliases}}{{if $i}}, {{end}}{{$a}}{{end}}</span>{{end}}</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Provider</th>
+        <th>Provider Model</th>
+        <th>Priority</th>
+        <th>Input Price (per 1M)</th>
+        <th>Output Price (per 1M)</th>
+        <th>Health</th>
+      </tr>
+    </thead>
+    <tbody>
+    {{$health := $.ProviderHealth}}
+    {{range .Routes}}
+    <tr>
+      <td>{{.ProviderName}}</td>
+      <td><code>{{.ProviderModel}}</code></td>
+      <td><span class="badge badge-priority">{{.Priority}}</span></td>
+      <td>{{formatPrice .InputPrice}}</td>
+      <td>{{formatPrice .OutputPrice}}</td>
+      <td>
+        {{$pname := .ProviderName}}
+        {{range $health}}
+          {{if eq .Provider $pname}}
+            {{if eq .Status "healthy"}}<span class="badge" style="background:#166534;color:#4ade80;">healthy</span>
+            {{else if eq .Status "degraded"}}<span class="badge" style="background:#92400e;color:#fbbf24;">degraded</span>
+            {{else}}<span class="badge" style="background:#991b1b;color:#f87171;">down</span>
+            {{end}}
+          {{end}}
+        {{end}}
+        {{if not $health}}<span style="color:var(--text-muted);">-</span>{{end}}
+      </td>
+    </tr>
+    {{end}}
+    </tbody>
+  </table>
+</div>
+{{end}}
+{{else}}
+<div class="section" style="text-align:center;color:var(--text-muted);padding:24px;">
+  No models configured
+</div>
+{{end}}
+{{end}}

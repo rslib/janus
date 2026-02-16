@@ -1,0 +1,70 @@
+{{define "content"}}
+<div class="page-header">
+  <h1>Users</h1>
+  <button class="btn btn-sm btn-primary" onclick="showCreateUserModal()">Create User</button>
+</div>
+
+<div class="section">
+  <table>
+    <thead><tr><th>ID</th><th>Username</th><th>Role</th><th>2FA</th><th>Created</th><th></th></tr></thead>
+    <tbody>
+    {{range .Users}}
+    <tr>
+      <td>{{.ID}}</td>
+      <td>{{.Username}}</td>
+      <td><span class="badge {{if .IsAdmin}}badge-admin{{else}}badge-user{{end}}">{{if .IsAdmin}}Admin{{else}}User{{end}}</span></td>
+      <td>{{if .TOTPEnabled}}<span class="badge badge-totp">Enabled</span>{{else}}Off{{end}}</td>
+      <td>{{formatTime .CreatedAt}}</td>
+      <td>{{if ne .ID $.User.ID}}<button class="btn btn-sm btn-danger"
+        hx-delete="/api/auth/users/{{.ID}}" hx-swap="none"
+        hx-confirm="Delete this user? All their sessions and tokens will be removed.">Delete</button>{{end}}</td>
+    </tr>
+    {{end}}
+    </tbody>
+  </table>
+</div>
+
+<!-- Create User Modal -->
+<div id="modal-create-user" class="modal-overlay">
+  <div class="modal">
+    <h2>Create User</h2>
+    <div id="create-user-error"></div>
+    <form hx-post="/api/auth/users" hx-target="#create-user-error" hx-swap="innerHTML" hx-ext="json-enc"
+      hx-vals='js:{username: document.getElementById("new-user-username").value, password: document.getElementById("new-user-password").value, is_admin: document.getElementById("new-user-admin").checked}'>
+      <div class="form-group">
+        <label>Username</label>
+        <input type="text" id="new-user-username" required>
+      </div>
+      <div class="form-group">
+        <label>Password (min 8 characters)</label>
+        <input type="password" id="new-user-password" required minlength="8">
+      </div>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" id="new-user-admin"> Admin
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-outline" onclick="closeUserModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary" style="width:auto">Create</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function showCreateUserModal() {
+  document.getElementById('create-user-error').innerHTML = '';
+  document.getElementById('new-user-username').value = '';
+  document.getElementById('new-user-password').value = '';
+  document.getElementById('new-user-admin').checked = false;
+  document.getElementById('modal-create-user').classList.add('show');
+}
+function closeUserModal() {
+  document.getElementById('modal-create-user').classList.remove('show');
+}
+document.getElementById('modal-create-user').addEventListener('click', function(e) {
+  if (e.target === this) closeUserModal();
+});
+</script>
+{{end}}

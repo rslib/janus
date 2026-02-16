@@ -1,0 +1,18 @@
+# Binaries
+gateway
+janus
+
+# Database
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Debug log files
+debug-logs/
+
+# Local config
+configs/config.local.yaml
+
+# Environment
+.env

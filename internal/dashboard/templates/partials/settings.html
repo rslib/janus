@@ -1,0 +1,141 @@
+{{define "content"}}
+<div class="page-header">
+  <h1>Settings</h1>
+</div>
+
+<div class="section">
+  <h2>Profile</h2>
+  <div id="profile-msg"></div>
+  <form hx-put="/api/auth/me/username" hx-target="#profile-msg" hx-swap="innerHTML" hx-ext="json-enc"
+    style="max-width:400px;margin-bottom:16px;">
+    <div class="form-group">
+      <label>Username</label>
+      <div style="display:flex;gap:8px;">
+        <input type="text" name="new_username" value="{{.User.Username}}" required>
+        <button type="submit" class="btn btn-sm btn-primary" style="white-space:nowrap;">Update</button>
+      </div>
+    </div>
+  </form>
+  <form hx-put="/api/auth/me/email" hx-target="#profile-msg" hx-swap="innerHTML" hx-ext="json-enc"
+    style="max-width:400px;">
+    <div class="form-group">
+      <label>Email</label>
+      <div style="display:flex;gap:8px;">
+        <input type="email" name="email" value="{{.User.Email}}" placeholder="optional">
+        <button type="submit" class="btn btn-sm btn-primary" style="white-space:nowrap;">Update</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<div class="section">
+  <h2>Change Password</h2>
+  <div id="password-msg"></div>
+  <form id="password-form" hx-put="/api/auth/me/password" hx-target="#password-msg" hx-swap="innerHTML" hx-ext="json-enc"
+    style="max-width:400px;">
+    <div class="form-group">
+      <label>Current Password</label>
+      <input type="password" name="current_password" required autocomplete="current-password">
+    </div>
+    <div class="form-group">
+      <label>New Password (min 8 characters)</label>
+      <input type="password" name="new_password" required minlength="8" autocomplete="new-password">
+    </div>
+    <div class="form-group">
+      <label>Confirm New Password</label>
+      <input type="password" id="new-password2" required minlength="8" autocomplete="new-password">
+    </div>
+    <button type="submit" class="btn btn-primary" style="width:auto;">Change Password</button>
+  </form>
+</div>
+
+<div class="section">
+  <h2>Two-Factor Authentication</h2>
+  <div id="totp-status">
+    {{if .User.TOTPEnabled}}
+    <p style="color:#4ade80;margin-bottom:12px;">Two-factor authentication is <strong>enabled</strong>.</p>
+    <button class="btn btn-sm btn-danger"
+      hx-delete="/api/auth/totp" hx-target="#totp-status" hx-swap="innerHTML"
+      hx-confirm="Disable two-factor authentication?">Disable 2FA</button>
+    {{else}}
+    <p style="color:#94a3b8;margin-bottom:12px;">Two-factor authentication is <strong>not enabled</strong>.</p>
+    <button class="btn btn-sm btn-primary" onclick="setupTOTP()">Enable 2FA</button>
+    {{end}}
+  </div>
+  <div id="totp-setup-area" style="display:none;">
+    <p style="color:#94a3b8;font-size:0.85rem;margin-bottom:12px;">Scan this QR code with your authenticator app, then enter the code below to verify.</p>
+    <div id="totp-qr" style="text-align:center;margin:16px 0;"></div>
+    <div id="totp-secret-display" style="text-align:center;margin:8px 0;font-family:monospace;color:#94a3b8;font-size:0.8rem;"></div>
+    <form hx-post="/api/auth/totp/verify" hx-target="#totp-status" hx-swap="innerHTML" hx-ext="json-enc"
+      style="max-width:300px;margin:0 auto;">
+      <div class="form-group">
+        <input type="text" name="code" required pattern="[0-9]{6}" maxlength="6" placeholder="Enter 6-digit code" autocomplete="one-time-code" inputmode="numeric" style="text-align:center;font-size:1.2rem;letter-spacing:0.2em;">
+      </div>
+      <button type="submit" class="btn btn-primary">Verify & Enable</button>
+    </form>
+  </div>
+</div>
+
+{{if .User.IsAdmin}}
+<div class="section">
+  <h2>Config Validation</h2>
+  <p style="color:#94a3b8;font-size:0.85rem;margin-bottom:12px;">Validate the current gateway configuration file for errors.</p>
+  <button class="btn btn-sm btn-primary"
+    hx-get="/api/config/validate"
+    hx-target="#config-validation-result"
+    hx-swap="innerHTML">Validate Config</button>
+  <div id="config-validation-result" style="margin-top:12px;"></div>
+</div>
+{{end}}
+
+<script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
+<script>
+// Password confirm validation
+document.body.addEventListener('htmx:confirm', function(e) {
+  var form = e.target;
+  if (form.id !== 'password-form') return;
+  var np = form.querySelector('[name=new_password]').value;
+  if (np !== document.getElementById('new-password2').value) {
+    e.preventDefault();
+    document.getElementById('password-msg').innerHTML = '<div class="error-msg">Passwords do not match</div>';
+  }
+});
+
+// Clear password fields after successful change
+document.body.addEventListener('htmx:afterRequest', function(e) {
+  if (e.target.id === 'password-form' && e.detail.successful) {
+    e.target.querySelectorAll('input[type=password]').forEach(function(i) { i.value = ''; });
+    document.getElementById('new-password2').value = '';
+  }
+});
+
+// Auto-clear messages after 5 seconds
+document.body.addEventListener('htmx:afterSwap', function(e) {
+  var target = e.detail.target;
+  if (target.id === 'profile-msg' || target.id === 'password-msg') {
+    setTimeout(function() { target.innerHTML = ''; }, 5000);
+  }
+});
+
+// Reload settings page when TOTP status changes
+document.body.addEventListener('settingsRefresh', function() {
+  htmx.ajax('GET', '/settings', {target: '#content', swap: 'innerHTML'});
+});
+
+// TOTP setup - needs JS for QR code rendering
+async function setupTOTP() {
+  try {
+    var resp = await fetch('/api/auth/totp/setup', { method: 'POST', credentials: 'same-origin' });
+    var data = await resp.json();
+    if (!resp.ok) { alert(data.error||'Failed'); return; }
+    document.getElementById('totp-setup-area').style.display = 'block';
+    document.getElementById('totp-secret-display').textContent = 'Secret: ' + data.secret;
+    var qrDiv = document.getElementById('totp-qr');
+    qrDiv.innerHTML = '';
+    var canvas = document.createElement('canvas');
+    new QRious({ element: canvas, value: data.uri, size: 200, level: 'M' });
+    qrDiv.appendChild(canvas);
+  } catch (e) { alert(e.message); }
+}
+</script>
+{{end}}

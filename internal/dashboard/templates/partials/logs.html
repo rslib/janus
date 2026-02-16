@@ -1,0 +1,133 @@
+{{define "content"}}
+<div class="page-header">
+  <h1>Request Logs</h1>
+  <span style="font-size:0.85rem;color:var(--text-muted)">{{.LogsResult.Total}} total</span>
+</div>
+
+<div class="filter-bar">
+  <select id="filter-model" onchange="applyLogsFilter()">
+    <option value="">All Models</option>
+    {{range .LogModels}}<option value="{{.}}" {{if eq . $.FilterModel}}selected{{end}}>{{.}}</option>{{end}}
+  </select>
+  <select id="filter-token" onchange="applyLogsFilter()">
+    <option value="">All Tokens</option>
+    {{range .LogTokens}}<option value="{{.}}" {{if eq . $.FilterToken}}selected{{end}}>{{.}}</option>{{end}}
+  </select>
+  <select id="filter-status" onchange="applyLogsFilter()">
+    <option value="">All Status</option>
+    <option value="success" {{if eq .FilterStatus "success"}}selected{{end}}>Success</option>
+    <option value="error" {{if eq .FilterStatus "error"}}selected{{end}}>Errors Only</option>
+    <option value="cached" {{if eq .FilterStatus "cached"}}selected{{end}}>Cached</option>
+  </select>
+  <button class="btn btn-sm btn-outline" onclick="clearLogsFilter()">Clear</button>
+  <span style="margin-left:auto"></span>
+  <button class="btn btn-sm btn-outline" onclick="exportLogs('csv')">Export CSV</button>
+  <button class="btn btn-sm btn-outline" onclick="exportLogs('json')">Export JSON</button>
+</div>
+
+<div class="section">
+  <table>
+    <thead>
+      <tr>
+        <th>Time</th>
+        <th>Token</th>
+        <th>Model</th>
+        <th>Provider</th>
+        <th>Status</th>
+        <th>Latency</th>
+        <th>Tokens</th>
+        <th>Cost</th>
+      </tr>
+    </thead>
+    <tbody>
+    {{range $i, $log := .LogsResult.Logs}}
+    <tr class="{{if $log.ErrorMessage}}expandable{{end}}" {{if $log.ErrorMessage}}onclick="toggleExpand('expand-{{$i}}')"{{end}}>
+      <td>{{formatTimeDetail $log.Timestamp}}</td>
+      <td>{{$log.TokenName}}</td>
+      <td>{{$log.Model}}</td>
+      <td>{{$log.Provider}}</td>
+      <td>
+        {{if eq $log.Status "success"}}<span class="badge badge-success">success</span>
+        {{else if eq $log.Status "error"}}<span class="badge badge-error">error</span>
+        {{else if eq $log.Status "cached"}}<span class="badge badge-cached">cached</span>
+        {{else}}<span class="badge">{{$log.Status}}</span>{{end}}
+        {{if $log.Streaming}} <span class="badge badge-totp">stream</span>{{end}}
+      </td>
+      <td>{{$log.LatencyMS}}ms</td>
+      <td>{{$log.InputTokens}} / {{$log.OutputTokens}}</td>
+      <td class="green">{{formatCost $log.CostUSD}}</td>
+    </tr>
+    {{if $log.ErrorMessage}}
+    <tr>
+      <td colspan="8" style="padding:0;">
+        <div id="expand-{{$i}}" class="expand-content {{if eq $.FilterStatus "error"}}show{{end}}">{{$log.ErrorMessage}}</div>
+      </td>
+    </tr>
+    {{end}}
+    {{end}}
+    {{if not .LogsResult.Logs}}
+    <tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:24px;">No logs found</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+
+  {{if gt .LogsResult.TotalPages 1}}
+  <div class="pagination">
+    <button {{if le .LogsResult.Page 1}}disabled{{end}} onclick="goToLogsPage(1)">First</button>
+    <button {{if le .LogsResult.Page 1}}disabled{{end}} onclick="goToLogsPage({{subInt .LogsResult.Page 1}})">Prev</button>
+    {{$page := .LogsResult.Page}}
+    {{$total := .LogsResult.TotalPages}}
+    {{range seq (paginationStart $page $total) (paginationEnd $page $total)}}
+    <button class="{{if eq . $page}}active{{end}}" onclick="goToLogsPage({{.}})">{{.}}</button>
+    {{end}}
+    <button {{if ge .LogsResult.Page .LogsResult.TotalPages}}disabled{{end}} onclick="goToLogsPage({{addInt .LogsResult.Page 1}})">Next</button>
+    <button {{if ge .LogsResult.Page .LogsResult.TotalPages}}disabled{{end}} onclick="goToLogsPage({{.LogsResult.TotalPages}})">Last</button>
+    <span class="page-info">Page {{.LogsResult.Page}} of {{.LogsResult.TotalPages}}</span>
+  </div>
+  {{end}}
+</div>
+
+<script>
+function buildLogsURL(page) {
+  var params = [];
+  var model = document.getElementById('filter-model').value;
+  var token = document.getElementById('filter-token').value;
+  var status = document.getElementById('filter-status').value;
+  if (model) params.push('model=' + encodeURIComponent(model));
+  if (token) params.push('token=' + encodeURIComponent(token));
+  if (status) params.push('status=' + encodeURIComponent(status));
+  if (page > 1) params.push('page=' + page);
+  return '/logs' + (params.length ? '?' + params.join('&') : '');
+}
+function applyLogsFilter() {
+  var url = buildLogsURL(1);
+  htmx.ajax('GET', url, {target: '#content', swap: 'innerHTML'});
+  history.pushState({}, '', url);
+}
+function goToLogsPage(page) {
+  var url = buildLogsURL(page);
+  htmx.ajax('GET', url, {target: '#content', swap: 'innerHTML'});
+  history.pushState({}, '', url);
+}
+function clearLogsFilter() {
+  document.getElementById('filter-model').value = '';
+  document.getElementById('filter-token').value = '';
+  document.getElementById('filter-status').value = '';
+  applyLogsFilter();
+}
+function toggleExpand(id) {
+  var el = document.getElementById(id);
+  if (el) el.classList.toggle('show');
+}
+function exportLogs(format) {
+  var params = ['format=' + format];
+  var model = document.getElementById('filter-model').value;
+  var token = document.getElementById('filter-token').value;
+  var status = document.getElementById('filter-status').value;
+  if (model) params.push('model=' + encodeURIComponent(model));
+  if (token) params.push('token=' + encodeURIComponent(token));
+  if (status) params.push('status=' + encodeURIComponent(status));
+  window.open('/api/export/logs?' + params.join('&'), '_blank');
+}
+</script>
+{{end}}

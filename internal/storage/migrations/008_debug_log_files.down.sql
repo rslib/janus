@@ -1,0 +1,1 @@
+-- no-op: file_path column is harmless to keep
