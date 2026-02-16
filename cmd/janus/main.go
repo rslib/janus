@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -32,7 +33,13 @@ var version = "dev"
 
 func main() {
 	configPath := flag.String("config", "configs/config.yaml", "path to config file")
+	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println("janus " + version)
+		os.Exit(0)
+	}
 
 	log.Printf("janus %s starting", version)
 
