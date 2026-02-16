@@ -22,7 +22,7 @@ pricing_lookup:
   refresh_interval: 6h
 
 database:
-  path: "/data/gateway.db"
+  path: "/data/janus.db"
   retention_days: 90
 
 cache:

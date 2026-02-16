@@ -172,7 +172,7 @@ func (c *Config) Validate() error {
 		log.Println("WARNING: no session_secret configured, generated random one (sessions won't survive restart)")
 	}
 	if c.Database.Path == "" {
-		c.Database.Path = "gateway.db"
+		c.Database.Path = "janus.db"
 	}
 	if c.Database.RetentionDays == 0 {
 		c.Database.RetentionDays = 90

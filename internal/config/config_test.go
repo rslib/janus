@@ -258,7 +258,7 @@ func TestValidate_Defaults(t *testing.T) {
 		{"Server.MaxRequestBodyMB", cfg.Server.MaxRequestBodyMB, 10},
 
 		// Database defaults
-		{"Database.Path", cfg.Database.Path, "gateway.db"},
+		{"Database.Path", cfg.Database.Path, "janus.db"},
 		{"Database.RetentionDays", cfg.Database.RetentionDays, 90},
 
 		// Pricing defaults
