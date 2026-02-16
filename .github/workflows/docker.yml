@@ -1,16 +1,41 @@
-name: Build and Push Docker Image
+name: CI
 
 on:
   push:
     branches: [trunk]
     tags: ['v*']
+  pull_request:
+    branches: [trunk]
 
 env:
   GHCR_IMAGE: ghcr.io/rslib/janus
   DOCKERHUB_IMAGE: rayandrew/janus
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Check go mod tidy
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: Check formatting
+        run: test -z "$(gofmt -l .)"
+
+      - name: Run tests
+        run: go test ./...
+
   build:
+    needs: test
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -50,7 +75,7 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix=
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/trunk' || startsWith(github.ref, 'refs/tags/v') }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -62,3 +87,40 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build binaries
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          LDFLAGS="-s -w -X main.version=${VERSION}"
+          GOOS=linux GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o janus-linux-amd64 ./cmd/janus
+          GOOS=linux GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o janus-linux-arm64 ./cmd/janus
+          GOOS=darwin GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o janus-darwin-amd64 ./cmd/janus
+          GOOS=darwin GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o janus-darwin-arm64 ./cmd/janus
+
+      - name: Generate checksums
+        run: sha256sum janus-* > checksums.txt
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            janus-*
+            checksums.txt
