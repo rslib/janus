@@ -1,6 +1,6 @@
 # Binaries
-gateway
-janus
+/gateway
+/janus
 
 # Database
 *.db
